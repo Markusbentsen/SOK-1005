@@ -1,0 +1,101 @@
+---
+title: "Arbeidskrav 2"
+format: html
+editor: visual
+---
+
+```{r}
+rm(list=ls())
+library(tidyverse)
+library(ggplot2)
+library(rvest)
+library(dplyr)
+library(naniar)
+
+df_motor <- 'https://www.motor.no/aktuelt/motors-store-vintertest-av-rekkevidde-pa-elbiler/217132' %>%
+   read_html() %>% 
+   html_nodes("table") %>%  
+   html_table() %>% .[[1]]
+
+#colnames 
+colnames(df_motor) <- df_motor[1,]
+df_motor <- df_motor[-1, ] 
+
+#X values as NA
+df_motor <- df_motor %>% replace_with_na_all(condition = ~.x == "x")  %>%
+  na.omit() 
+ 
+#seperates the unit from the number and renames model column
+df_motor <- df_motor %>% 
+  separate("WLTP-tall", 
+          into=c("WLTP", "Effekt"), 
+          sep="/")
+df_motor <- df_motor %>%
+  separate("WLTP", 
+           into=c("wltp_ny", "var_wltp"), 
+           sep=" ")
+df_motor <- df_motor %>%
+  separate("Effekt", 
+           into=c("effekt_ny", "var_effekt"), 
+           sep=" ") 
+df_motor <- df_motor %>%
+  separate("STOPP", 
+           into=c("stopp_ny", "var_stopp"), 
+           sep=" ")
+df_motor <- df_motor %>%
+  separate("Avvik", 
+           into=c("avvik_percent_ny", "var_avvik"), 
+           sep=" ")
+df_motor <- df_motor %>%
+  rename(modell = `Modell (temp. varierte fra 0° til -10°)`) 
+
+#using only the variables i want and making them numeric
+df_motor <- df_motor %>%
+  select(c(modell, wltp_ny, effekt_ny, stopp_ny, avvik_percent_ny)) %>%
+  mutate(wltp_ny = as.numeric(wltp_ny), 
+         stopp_ny = as.numeric(stopp_ny))
+
+#Giving x and y axis limits
+xy.limits <- range( c(100,800) )
+
+#Plot
+df_motor %>%
+  ggplot(aes(x = wltp_ny, y = stopp_ny)) +
+  geom_point() + 
+  geom_abline(intercept = 0, slope = 1, color="red") +
+  scale_x_continuous(limits=xy.limits) + 
+  scale_y_continuous(limits=xy.limits) + 
+  coord_fixed( ratio=1) + 
+  theme_minimal() +
+  labs(title="Kilometers the different cars drove", y="Range", 
+       x="Range",
+       subtitle = "The red line shows how far the cars should have drove") 
+
+
+#LM formula from the task
+lm(formula = stopp_ny ~ wltp_ny, data = df_motor)
+
+#task 2 plot
+df_motor %>%
+  ggplot(aes(x = wltp_ny, y = stopp_ny)) +
+  geom_smooth(method=lm) +
+  geom_point() +  
+  geom_abline(intercept = 0, slope = 1, color="red") +
+  scale_x_continuous(limits=xy.limits) + 
+  scale_y_continuous(limits=xy.limits) + 
+  coord_fixed( ratio=1) + 
+  theme_minimal() +
+  labs(title="Kilometers the different cars drove", y="Range", 
+       x="Range",
+       subtitle = "The red line shows how far the cars should have drove")
+
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
