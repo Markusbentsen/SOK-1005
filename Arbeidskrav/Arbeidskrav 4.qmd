@@ -1,0 +1,179 @@
+---
+title: "Task 4"
+author: "Markus Bentsen"
+format: html
+editor: visual
+---
+
+```{r}
+#Loading packages
+rm(list=ls())
+library(tidyverse)
+library(lubridate)
+library(rjstat)
+library(janitor)
+library(jsonlite)
+library(gdata)
+library(httr) 
+library(ggthemes)
+library(dplyr)
+library(Quandl)
+library(readr)
+library(quantmod)
+
+#URL 
+df <- read_csv("https://raw.githubusercontent.com/uit-sok-1005-v23/uit-sok-1005-v23.github.io/main/storedata.csv")
+
+
+```
+
+# Task 1
+
+1: For the last 3 months of 2017, calculate the total Sales by month, for Region 1 and Region 9 in the Customer_Segment, Corporate, and Consumer. This output is Table 1.
+
+```{r}
+#Task 1, segment 1
+
+#Creating a variabel for month and year
+df$Year <- format(df$Order_Date, "%Y")
+df$Month <- format(df$Order_Date, "%m")
+
+#Creating a dataframe for task 1
+df_2017 <- df
+
+#filtering out everything besides region 1 and 9
+df_2017 <- df_2017 %>% 
+  filter(Year == "2017", Month >= "10", Customer_Segment %in% c("Corporate", "Consumer"), Region %in% c("Region 1", "Region 9")) %>% 
+  group_by(Region, Month, Customer_Segment) %>%
+  summarize(Total_Sales = sum(Sales)) 
+
+
+df_2017
+```
+
+2: Make a plot of the monthly total Sales in Region 1 and Region 13 in 2015, 2016, and 2017. This output is Figure 1.
+
+```{r}
+#Task 1, segment 2
+figur1 <- df %>% 
+  filter(Year %in% c("2015", "2016", "2017"), 
+  Region %in% c("Region 1", "Region 13")) %>% 
+  group_by(Region, Year, Month) %>%
+  summarize(Total_Sales = sum(Sales)) %>%
+  ggplot(aes(x = Month, y = Total_Sales, fill = Year)) +
+  geom_col(width = 0.8, position = "dodge") +
+  facet_wrap(~ Region, ncol = 2) +
+  labs(x = "Months", y = "Sales", fill = "Year")+
+  ggtitle("Total sales for region 1 and 13") +
+  theme_bw()
+
+figur1
+```
+
+3: In Figure 1, identify the months where the total Sales in Region 13 is greater than the total Sales in Region 1. This output is Table 2.
+
+```{r}
+#Filtering out every year besides 2015-2017 and region 1 and 13
+table2 <- df %>%
+  filter(Year %in% c("2015", "2016", "2017"), 
+  Region %in% c("Region 1", "Region 13")) %>% 
+  group_by(Region, Year, Month) %>%
+  summarize(Total_Sales = sum(Sales))
+
+#Comparing region 1 and 13 to see identify the months where total sales are higher
+table2 <- table2 %>%
+  pivot_wider(names_from = Region, values_from = Total_Sales) %>%
+  filter(!!sym("Region 1") < !!sym("Region 13")) %>% 
+  select(Year, Month, !!sym("Region 1"), !!sym("Region 13"))
+ 
+
+table2
+```
+
+4: Find the average Profit per Customer_Segment and Product_Category in 2017, for all regions except Region 3, 5 and 8. What segment produced the highest average profit? This output is Table 3.
+
+```{r}
+#Filtering out everything besides 2017 and finding the mean for each customer
+table3 <- df %>% 
+  filter(Year == 2017, !Region %in% c("Region 3", "Region 5", "Region 8")) %>%
+  group_by(Customer_Segment, Product_Category) %>% 
+  summarize(Profitt = mean(Profit)) %>% 
+  arrange(desc(Profitt)) 
+
+table3
+```
+
+# Task 2
+
+```{r}
+#Downloading the required data from xom and making  it into a dataframe
+getSymbols("XOM", src = "yahoo") 
+xom_df <- as.data.frame(XOM)
+xom_df <- tibble::rownames_to_column(xom_df, var = "Date")
+xom_df$Date <- as.Date(xom_df$Date) 
+xom_df <- xom_df %>% 
+  filter(Date >= "2010-01-04" & Date <= "2022-12-31")
+
+#getting the monthtly average
+xom_monthly <- xom_df %>%  
+  mutate(year_month = format(Date, "%Y-%m")) %>%
+  group_by(year_month) %>% 
+  summarize(exxon_avg = weighted.mean(XOM.Close, XOM.Volume))
+
+#creating a date variabel
+xom_monthly$year_month <- ym(xom_monthly$year_month)
+```
+
+```{r}
+#Downloading data for brent oil and making it into a dataframe
+getSymbols("DCOILBRENTEU", src = "FRED") 
+oil_df <- as.data.frame(DCOILBRENTEU)
+oil_df <- tibble::rownames_to_column(oil_df, var = "Date")
+oil_df$Date <- as.Date(oil_df$Date)
+oil_df <- oil_df %>%
+  filter(Date >= "2010-01-04" & Date <= "2022-12-31")
+
+#getting the montly average
+oil_monthly <- na.omit(oil_df) %>%  
+  mutate(year_month = format(Date, "%Y-%m")) %>% 
+  group_by(year_month) %>% 
+  summarize(oil_avg = mean(DCOILBRENTEU))
+
+#Creating a date variabel
+oil_monthly$year_month <- ym(oil_monthly$year_month)
+```
+
+```{r}
+ggplot() + 
+  geom_line(data = xom_monthly, aes(x = year_month,
+  y = exxon_avg, color="XOM")) +
+  geom_line(data = oil_monthly, aes(x = year_month, 
+  y = oil_avg, color="OIL")) + 
+  xlab("Year") +  
+  ylab("Price") +
+  ggtitle("Monthly average prices of Exxon and Brent oil") + 
+  theme_bw() 
+```
+
+```{r}
+#merging the dataframes by year_month
+oil_merged <- merge(xom_monthly, oil_monthly, by = "year_month")
+
+#plotting with xon as y-variabel and oil as x-variabel
+oil_merged %>%
+  ggplot(aes(x=exxon_avg, y=oil_avg)) +
+  geom_smooth(method=lm, se = FALSE)+
+  geom_abline(slope=1, intercept = 0, color="red") +
+  labs(title="Correlation between XOM
+and oil price", subtitle='The blue line is the actual correlation', y="Oil", x="XOM") +
+  theme_bw()
+
+
+```
+
+The blue line shows the correlation between exxon and brent oil.
+
+```{r}
+#Use R’s  lm() function. Set the variable on the y-axis and x-axis, and specify the data set. 
+lm(oil_avg ~ exxon_avg, data=oil_merged)
+```
